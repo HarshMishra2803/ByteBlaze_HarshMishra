@@ -23,9 +23,23 @@ export async function POST(req) {
         const buffer = Buffer.from(await file.arrayBuffer());
         
         if (file.name.endsWith('.pdf')) {
-          const pdfParse = (await import('pdf-parse')).default;
-          const pdfData = await pdfParse(buffer);
-          text = pdfData.text;
+          const pdfModule = await import('pdf-parse');
+          
+          if (pdfModule.PDFParse) {
+            // v2.x Class-based usage
+            const parser = new pdfModule.PDFParse({ data: buffer });
+            const pdfData = await parser.getText();
+            text = pdfData.text;
+            await parser.destroy();
+          } else {
+            // v1.x Function-based usage
+            const pdfParse = pdfModule.default || pdfModule;
+            if (typeof pdfParse !== 'function') {
+              throw new Error('PDF parsing library could not be initialized correctly.');
+            }
+            const pdfData = await pdfParse(buffer);
+            text = pdfData.text;
+          }
         } else {
           text = buffer.toString('utf-8');
         }
@@ -47,9 +61,10 @@ export async function POST(req) {
 
     return NextResponse.json({ result: simplified });
   } catch (error) {
-    console.error('Simplification error:', error);
+    console.error('Simplification error path:', req.nextUrl.pathname);
+    console.error('Error details:', error);
     return NextResponse.json(
-      { error: 'AI service is temporarily unavailable. Please try again.' },
+      { error: `Analysis failed: ${error.message || 'AI service is temporarily unavailable'}` },
       { status: 500 }
     );
   }
